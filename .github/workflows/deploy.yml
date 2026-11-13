@@ -20,6 +20,9 @@ jobs:
 
       - name: Build React Frontend
         working-directory: ./react-frontend
+        env:
+          NODE_OPTIONS: --openssl-legacy-provider
+          CI: false
         run: |
           npm install
           npm run build
@@ -32,7 +35,9 @@ jobs:
 
       - name: Build Spring Boot JAR
         working-directory: ./springboot-backend
-        run: ./mvnw clean package -DskipTests
+        run: |
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests
 
       - name: Copy files to Amazon Linux EC2
         uses: appleboy/scp-action@v0.1.7
