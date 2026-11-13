@@ -39,41 +39,38 @@ jobs:
           chmod +x mvnw
           ./mvnw clean package -DskipTests
 
+      - name: Configure SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key.pem
+          chmod 600 ~/.ssh/ec2_key.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
       - name: Copy files to Amazon Linux EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "react-frontend/build/*,springboot-backend/target/*.jar,nginx/fullstack.conf"
-          target: "/home/ec2-user/deploy-temp"
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p /home/ec2-user/deploy-temp/build"
+          scp -i ~/.ssh/ec2_key.pem -r react-frontend/build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/build/
+          scp -i ~/.ssh/ec2_key.pem springboot-backend/target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/app.jar
+          scp -i ~/.ssh/ec2_key.pem nginx/fullstack.conf ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/fullstack.conf
 
       - name: Deploy and Restart on Amazon Linux EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            # Ensure Java 17 is installed on Amazon Linux
+        run: |
+          ssh -i ~/.ssh/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
             if ! command -v java &> /dev/null; then
               sudo dnf install java-17-amazon-corretto -y || sudo yum install java-17-amazon-corretto -y
             fi
 
-            # Update React frontend files and set Nginx permissions
             sudo rm -rf /usr/share/nginx/html/*
-            sudo cp -r /home/ec2-user/deploy-temp/react-frontend/build/* /usr/share/nginx/html/
+            sudo cp -r /home/ec2-user/deploy-temp/build/* /usr/share/nginx/html/
             sudo chown -R nginx:nginx /usr/share/nginx/html
 
-            # Update and restart Spring Boot backend
             mkdir -p /home/ec2-user/backend
-            cp /home/ec2-user/deploy-temp/springboot-backend/target/*.jar /home/ec2-user/backend/app.jar
+            cp /home/ec2-user/deploy-temp/app.jar /home/ec2-user/backend/app.jar
             pkill -f 'app.jar' || true
             nohup java -jar /home/ec2-user/backend/app.jar > /home/ec2-user/backend/app.log 2>&1 &
 
-            # Update and reload Nginx configuration
-            sudo cp /home/ec2-user/deploy-temp/nginx/fullstack.conf /etc/nginx/conf.d/fullstack.conf
+            sudo cp /home/ec2-user/deploy-temp/fullstack.conf /etc/nginx/conf.d/fullstack.conf
             sudo nginx -t && sudo systemctl reload nginx
 
-            # Remove temporary deployment files
             rm -rf /home/ec2-user/deploy-temp
+          EOF
