@@ -1,4 +1,4 @@
-name: Deploy React + Spring Boot to Amazon Linux EC2
+name: Deploy React + Spring Boot to Ubuntu EC2
 
 on:
   push:
@@ -46,31 +46,28 @@ jobs:
           chmod 600 ~/.ssh/ec2_key.pem
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Copy files to Amazon Linux EC2
+      - name: Copy files to Ubuntu EC2
         run: |
-          ssh -i ~/.ssh/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p /home/ec2-user/deploy-temp/build"
-          scp -i ~/.ssh/ec2_key.pem -r react-frontend/build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/build/
-          scp -i ~/.ssh/ec2_key.pem springboot-backend/target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/app.jar
-          scp -i ~/.ssh/ec2_key.pem nginx/fullstack.conf ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/deploy-temp/fullstack.conf
+          ssh -i ~/.ssh/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p /home/ubuntu/deploy-temp/build"
+          scp -i ~/.ssh/ec2_key.pem -r react-frontend/build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/deploy-temp/build/
+          scp -i ~/.ssh/ec2_key.pem springboot-backend/target/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/deploy-temp/app.jar
+          scp -i ~/.ssh/ec2_key.pem nginx/fullstack.conf ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/deploy-temp/fullstack.conf
 
-      - name: Deploy and Restart on Amazon Linux EC2
+      - name: Deploy and Restart on Ubuntu EC2
         run: |
           ssh -i ~/.ssh/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            if ! command -v java &> /dev/null; then
-              sudo dnf install java-17-amazon-corretto -y || sudo yum install java-17-amazon-corretto -y
-            fi
+            sudo rm -rf /var/www/html/*
+            sudo cp -r /home/ubuntu/deploy-temp/build/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
 
-            sudo rm -rf /usr/share/nginx/html/*
-            sudo cp -r /home/ec2-user/deploy-temp/build/* /usr/share/nginx/html/
-            sudo chown -R nginx:nginx /usr/share/nginx/html
-
-            mkdir -p /home/ec2-user/backend
-            cp /home/ec2-user/deploy-temp/app.jar /home/ec2-user/backend/app.jar
+            mkdir -p /home/ubuntu/backend
+            cp /home/ubuntu/deploy-temp/app.jar /home/ubuntu/backend/app.jar
             pkill -f 'app.jar' || true
-            nohup java -jar /home/ec2-user/backend/app.jar > /home/ec2-user/backend/app.log 2>&1 &
+            nohup java -jar /home/ubuntu/backend/app.jar > /home/ubuntu/backend/app.log 2>&1 &
 
-            sudo cp /home/ec2-user/deploy-temp/fullstack.conf /etc/nginx/conf.d/fullstack.conf
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo cp /home/ubuntu/deploy-temp/fullstack.conf /etc/nginx/conf.d/fullstack.conf
             sudo nginx -t && sudo systemctl reload nginx
 
-            rm -rf /home/ec2-user/deploy-temp
+            rm -rf /home/ubuntu/deploy-temp
           EOF
