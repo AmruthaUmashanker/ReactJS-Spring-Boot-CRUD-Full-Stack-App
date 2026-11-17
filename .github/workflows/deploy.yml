@@ -63,7 +63,7 @@ jobs:
             mkdir -p /home/ubuntu/backend
             cp /home/ubuntu/deploy-temp/app.jar /home/ubuntu/backend/app.jar
             pkill -f 'app.jar' || true
-            nohup java -jar /home/ubuntu/backend/app.jar > /home/ubuntu/backend/app.log 2>&1 &
+            nohup java -Xmx384m -jar /home/ubuntu/backend/app.jar > /home/ubuntu/backend/app.log 2>&1 &
 
             sudo rm -f /etc/nginx/sites-enabled/default
             sudo cp /home/ubuntu/deploy-temp/fullstack.conf /etc/nginx/conf.d/fullstack.conf
